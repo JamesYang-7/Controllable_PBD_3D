@@ -4,3 +4,4 @@ imgui.ini
 objs/
 .DS_Store
 track/
+*/build/

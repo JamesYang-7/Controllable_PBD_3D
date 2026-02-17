@@ -37,12 +37,15 @@ class PointsData:
     self.c_color = ti.Vector.field(3, dtype=ti.f32, shape=self.n_points)
 
   def set_color(self,
-                point_color=(0.0, 1.0, 0.0),
+                point_color=(0.7, 0.7, 0.7),
                 fixed_color=(1.0, 0.0, 0.0),
-                fixed=[]):
+                marked_color=(0.3, 1.0, 0.3),
+                fixed=[],
+                marked=[]):
     color = self.c_color.to_numpy()
     color[:] = np.array(point_color)
     color[fixed] = np.array(fixed_color)
+    color[marked] = np.array(marked_color)
     self.c_color.from_numpy(color)
 
 

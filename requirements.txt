@@ -1,0 +1,9 @@
+taichi 
+usd-core
+meshio
+pillow
+glfw
+PyOpenGL
+PyOpenGL_accelerate
+scipy
+pyvista

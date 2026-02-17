@@ -1,0 +1,22 @@
+dir_name: 'simple_sphere'
+obj_name: 'simple_sphere'
+fixed_id: [0, 11]
+operating_points_id: [11]
+scale: 1.0
+repose: [0.0, 0.0, 0.0]
+speed: 0.5
+movement_direction: [0.0, 1.0, 0.0]
+
+pbd:
+  gravity: [0.0, 0.0, 0.0]
+  fps: 60
+  substeps: 5
+  subsub: 1
+  damp: 0.993
+
+cons:
+  deform3d:
+    enabled: true
+    hydro_alpha: 1e-2
+    devia_alpha: 1e-1
+    method: 'default'

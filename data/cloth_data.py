@@ -47,9 +47,8 @@ class ClothData:
     vert_mass, face_mass = geom2d.compute_vert_mass(verts, faces)
     self.v_invm = ti.field(dtype=ti.f32, shape=self.n_verts)
     self.f_m = ti.field(dtype=ti.f32, shape=self.n_faces)
-    self.v_invm.from_numpy(1.0 / vert_mass)
+    self.v_invm.from_numpy(scale * scale / vert_mass)
     self.f_m.from_numpy(face_mass)
-
 
 def load_cloth_mesh(meshpath: str,
                     scale=1.0,

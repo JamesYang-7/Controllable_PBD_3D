@@ -1,0 +1,3 @@
+[submodule "dependencies/TetGen"]
+	path = dependencies/TetGen
+	url = https://github.com/TetGen/TetGen.git
