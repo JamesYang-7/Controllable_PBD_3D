@@ -80,3 +80,10 @@ class pbd_framework:
       return
     for i in range(len(self.cons_list[index])):
       self.cons_list[index][i].update_cons()
+
+  def step(self, subsub=1, index=0):
+    self.make_prediction()
+    self.preupdate_cons(index)
+    for _ in range(subsub):
+      self.update_cons(index)
+    self.update_vel()

@@ -6,7 +6,7 @@ def get_args(filepath=None):
     parser = ArgumentParser(description='Training parameters')
     parser.add_argument('--cfg',
                         help='configure file name',
-                        default="config/1010_amass_rot_transformer.yaml",
+                        default="config/example.yaml",
                         type=str)
 
     if filepath is None:
