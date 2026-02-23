@@ -20,7 +20,8 @@ class VBDSolver:
                damping: float = 0.0,
                n_iterations: int = 10,
                rho: float = 0.0,
-               method: str = 'serial') -> None:
+               method: str = 'serial',
+               benchmark=None) -> None:
     self.n_verts = v_p.shape[0]
     self.n_tets = t_i.shape[0] // 4
     self.v_p = v_p
@@ -34,6 +35,7 @@ class VBDSolver:
     self.rho = rho
     self.damping_coeff = damping
     self.method = method
+    self.benchmark = benchmark
 
     self.damp = ti.field(dtype=ti.f32, shape=())
     self.damp[None] = damp
@@ -129,8 +131,11 @@ class VBDSolver:
                          self.gravity * self.dt * self.dt
       self.v_p[k] = self.x_tilde[k]
 
-  def solve(self):
+  def solve(self, frame: int = 0):
     """Run VBD iterations."""
+    if self.benchmark is not None:
+      self.benchmark.begin_frame(frame)
+
     omega = 1.0
     for n in range(self.n_iterations):
       self._copy_to_prev()
@@ -147,6 +152,12 @@ class VBDSolver:
           omega = 4.0 / (4.0 - self.rho * self.rho * omega)
         self._apply_chebyshev(omega)
 
+      if self.benchmark is not None:
+        self.benchmark.record_iteration(n, 0.0, omega=omega)
+
+    if self.benchmark is not None:
+      self.benchmark.end_frame()
+
   @ti.kernel
   def update_vel(self):
     """Update velocities from position change."""
@@ -154,10 +165,10 @@ class VBDSolver:
       self.v_v[k] = self.damp[None] * (self.v_p[k] -
                                         self.v_p_old[k]) / self.dt
 
-  def step(self):
+  def step(self, frame: int = 0):
     """Full timestep: predict → solve → velocity update."""
     self.make_prediction()
-    self.solve()
+    self.solve(frame)
     self.update_vel()
 
   @ti.kernel

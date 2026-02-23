@@ -41,12 +41,15 @@ Assets go in `assets/<name>/` with OBJ mesh, optional `.tgf` cage, and `.txt` we
 ## File Structure
 
 ```
-├── cons/              # Constraint system (XPBD + VBD solvers) — CORE
+├── cons/              # Constraint system (XPBD + VBD + MGPBD solvers) — CORE
 ├── data/              # Mesh data structures (Taichi fields) — CORE
 ├── compdyn/           # Deformation control & inverse kinematics — CORE
-├── interface/         # Rendering (Taichi UI viewer, USD export)
-├── utils/             # Geometry, I/O, math, graph coloring helpers
+├── interface/         # Rendering (Taichi UI viewer, USD export, MG visualizer)
+├── utils/             # Geometry, I/O, math, graph coloring, benchmarking helpers
+├── experiments/       # Experiment scripts (convergence, scaling, stiffness, ablation)
+│   └── run_all.py     # Master runner: python -m experiments.run_all --exp 1.1 1.2
 ├── config/            # YAML simulation configs
+│   └── experiments/   # Per-experiment YAML configs
 ├── test/              # Test & demo scripts
 │   ├── standalone/    # Standalone scripts with hardcoded paths (cube, sphere, prostate, spot)
 │   └── jacobi/        # Jacobi vs Gauss-Seidel solver comparison tests
@@ -54,7 +57,8 @@ Assets go in `assets/<name>/` with OBJ mesh, optional `.tgf` cage, and `.txt` we
 ├── assets/            # Mesh assets (19 subdirs: cube, sphere, prostate, spot, cheb)
 │   └── <name>/        # Each contains: .obj/.mesh, .tgf (control points), weights.npy/.txt
 ├── notes/             # Research notes & constraint derivations
-├── out/               # Generated simulation output (.obj, .usdc)
+├── out/               # Generated simulation output (.obj, .usdc, experiment plots)
+│   └── experiments/   # Per-experiment output directories
 ├── related_work/      # Reference papers (VBD TOG 2024, Augmented VBD SIGGRAPH 2025)
 └── dependencies/
     └── TetGen/        # Git submodule — tetrahedral mesh generator (C++)
@@ -76,11 +80,17 @@ All test scripts follow this flow:
 **`cons/` — Constraint system (XPBD + VBD + MGPBD solvers)**
 - `framework.py`: `pbd_framework` — manages constraint pipeline, Verlet integration, velocity updates
 - `length.py`: `LengthCons` — edge distance preservation with multiple solver methods (default/Jacobi/Gauss-Seidel/graph-coloring)
-- `deform3d.py`: `Deform3D` — Neo-Hookean material on tet meshes (coupled hydrostatic + deviatoric XPBD)
+- `deform3d.py`: `Deform3D` — Neo-Hookean material on tet meshes (coupled hydrostatic + deviatoric XPBD). Accepts optional `benchmark=SolverBenchmark` for profiling.
 - `bend.py`: `Bend3D` — dihedral angle bending resistance between adjacent faces
 - `volume.py`: `Volume` — global volume preservation
-- `vbd.py`: `VBDSolver` — Vertex Block Descent solver (alternative to XPBD). Per-vertex local 3x3 Newton solve with Neo-Hookean material, supports serial and graph-coloring methods, optional Chebyshev acceleration
-- `mgpbd.py`: `MGPBDSolver` — Multigrid-accelerated Global XPBD solver for tetrahedral elasticity. Assembles a global sparse system A * dlambda = b per Newton iteration using ARAP constraint energy, then solves it with MGPCG (PyAMG smoothed-aggregation hierarchy + Galerkin RAP coarse-matrix updates). Supports optional backtracking line search.
+- `vbd.py`: `VBDSolver` — Vertex Block Descent solver (alternative to XPBD). Per-vertex local 3x3 Newton solve with Neo-Hookean material, supports serial and graph-coloring methods, optional Chebyshev acceleration. Accepts optional `benchmark=SolverBenchmark`.
+- `mgpbd.py`: `MGPBDSolver` — CPU MGPBD solver. Assembles a global sparse system A * dlambda = b per Newton iteration using ARAP constraint energy, then solves with MGPCG (PyAMG smoothed-aggregation hierarchy + Galerkin RAP coarse-matrix updates). Supports optional backtracking line search. Accepts optional `benchmark=SolverBenchmark`.
+- `mgpbd_gpu.py`: `MGPBDSolverGPU` — Fully GPU-resident MGPBD solver. Same interface as `MGPBDSolver` but the inner solve loop has zero CPU-GPU transfers. Uses `GPUMultigridSolver` and `tet_aggregation` hierarchy. Accepts `aggregation='tet'` (geometry-aware) or `'pyamg'`.
+- `sparse_gpu.py`: `GPUSparseMatrix` — GPU-resident CSR sparse matrix (Taichi fields). Module-level kernels: `gpu_dot`, `gpu_axpy`, `gpu_xpay`, `gpu_copy`, `gpu_fill_zero`, `gpu_norm_sq`, etc. SpMV and weighted Jacobi smoothing.
+- `mgpcg_gpu.py`: `GPUMultigridSolver` — GPU-native V-cycle + MGPCG solver. Setup builds contribution maps on CPU (one-time), then coarse matrix values are recomputed on GPU via pre-computed `(k,l)` pair indices (avoids SpMM). `solve(b, x)` runs PCG with V-cycle preconditioner entirely on GPU.
+- `tet_aggregation.py`: Tet-specialized multigrid hierarchy. `tet_geometry_aggregation()` does greedy face-adjacent tet matching. `build_prolongation_from_aggregates()` builds piecewise-constant P matrices. `build_tet_hierarchy()` recurses until `max_coarse` reached.
+- `adaptive_zone.py`: `AdaptiveZone` — marks tets active/passive by proximity to tool or strain rate threshold. `expand_zone(n_rings)` inflates boundary for stability buffer.
+- `mgpbd_adaptive.py`: `MGPBDAdaptiveSolver` — wraps CPU or GPU pipeline; inflates `alpha_tilde` to 1e20 for passive tets to freeze them while retaining a single solve call.
 
 All XPBD constraints implement: `init_rest_status()`, `preupdate_cons()`, `update_cons()`
 
@@ -104,6 +114,7 @@ All XPBD constraints implement: `init_rest_status()`, `preupdate_cons()`, `updat
 - `render_funcs.py`: Factory functions for rendering meshes, cages, particles into `ti.ui.Scene`
 - `usd_render.py`: `UsdRender` — USD stage creation
 - `usd_objs.py`: `SaveMesh`, `SaveLines`, `SavePoints` — USD geometry exporters with per-frame update
+- `mg_visualizer.py`: `MultigridVisualizer` — colored tet overlay showing aggregate groups per hierarchy level; `ZoneVisualizer` — colors active/passive tets from `AdaptiveZone`. Both provide `get_render_func()` for `MeshRender3D`. Call `cycle_level()` (bind to 'g') to step through MG levels.
 
 **`utils/` — Helpers**
 - `geom2d.py` / `geom3d.py`: Edge extraction, rest lengths, vertex mass, surface extraction from tets
@@ -114,6 +125,17 @@ All XPBD constraints implement: `init_rest_status()`, `preupdate_cons()`, `updat
 - `anim.py`: Sinusoidal movement for operating points
 - `arg_parser.py`: CLI argument parser + YACS config loader
 - `objs.py`: `Quad`, `BoundBox3D` — collision objects (planes, AABB)
+- `bench.py`: `SolverBenchmark` — per-frame timing (uses `ti.sync()` + `time.perf_counter()`) and per-iteration residual tracking. `save(path)` writes JSON; `summary()` returns avg frame time, iterations, residual. Used by `MGPBDSolver`, `MGPBDSolverGPU`, `VBDSolver`, `Deform3D`.
+
+**`experiments/` — Benchmark & experiment scripts**
+- `plot_utils.py`: Matplotlib helpers — `plot_convergence()`, `plot_resolution_scaling()`, `plot_stiffness_scaling()`, `plot_timing_bars()`, `plot_adaptive_tradeoff()`
+- `exp_convergence.py`: Exp 1.1 — XPBD vs VBD vs MGPBD-CPU vs MGPBD-GPU convergence curves
+- `exp_resolution.py`: Exp 1.2 — wall-clock scaling with mesh resolution
+- `exp_stiffness.py`: Exp 1.3 — iteration count vs material stiffness (mu 1e3–1e7)
+- `exp_tool_tissue.py`: Exp 2.2 — prostate mesh with displacement-controlled tool interaction
+- `exp_adaptive.py`: Exp 2.3 — speedup vs accuracy with spatial adaptivity zones
+- `exp_ablation.py`: Exp 3.1 — per-component speedup: generic AMG → tet aggregation → GPU solve → spatial adaptivity
+- `run_all.py`: Master runner; `python -m experiments.run_all --exp 1.1 1.2` or `--list`
 
 ### Config Format (YAML)
 
@@ -135,9 +157,21 @@ cons:
 
 `alpha` is XPBD compliance: higher = softer constraint.
 
+### Running Experiments
+
+```bash
+python -m experiments.run_all --list                  # show available experiments
+python -m experiments.run_all --exp 1.1               # convergence comparison
+python -m experiments.run_all --exp 1.1 1.2 1.3       # multiple experiments
+python -m experiments.run_all --n_frames 10           # quick smoke test
+```
+
+Output plots are saved to `out/experiments/<exp_name>/`.
+
 ### Taichi Conventions
 
 - All physics computation uses `@ti.kernel` and `@ti.func` decorators for GPU execution
 - Mesh data stored as `ti.field` and `ti.Vector.field` (GPU-resident)
 - Taichi must be initialized before any field allocation (typically `ti.init(arch=ti.vulkan)`)
 - Constraint solvers use atomic operations (`ti.atomic_add`) for parallel Jacobi updates
+- **`@staticmethod` + `@ti.kernel` with `ti.template()` does NOT work in Taichi 1.7.1.** Use module-level `@ti.kernel` functions instead (see `cons/sparse_gpu.py` pattern).

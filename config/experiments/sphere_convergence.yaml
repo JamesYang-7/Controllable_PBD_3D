@@ -1,0 +1,39 @@
+dir_name: 'simple_sphere'
+obj_name: 'simple_sphere.mesh'
+fixed_id: [0, 11]
+operating_points_id: [11]
+scale: 1.0
+repose: [0.0, 0.0, 0.0]
+speed: 0.5
+movement_direction: [0.0, 1.0, 0.0]
+
+common:
+  gravity: [0.0, 0.0, 0.0]
+  fps: 60
+  substeps: 5
+  damp: 0.993
+
+mgpbd:
+  mu: 1e6
+  maxiter: 50
+  atol: 1e-8
+  rtol: 1e-6
+  maxiter_cg: 100
+  tol_cg: 1e-5
+  n_smooth: 2
+  omega_jacobi: 0.6667
+  setup_interval: 10000
+  use_line_search: true
+
+vbd:
+  youngs_modulus: 1e6
+  poissons_ratio: 0.3
+  n_iterations: 50
+  rho: 0.0
+  method: 'serial'
+
+xpbd:
+  hydro_alpha: 0.0
+  devia_alpha: 1e-4
+  method: 'default'
+  n_iterations: 10

@@ -1,5 +1,4 @@
 import taichi as ti
-import numpy as np
 from utils.mathlib import *
 from utils.graph_coloring import color_elements
 
@@ -16,7 +15,8 @@ class Deform3D:
                dt: float,
                hydro_alpha=0.0,
                devia_alpha=0.0,
-               method='default') -> None:
+               method='default',
+               benchmark=None) -> None:
     self.n = t_i.shape[0] // 4
     self.hydro_lambda = ti.field(dtype=ti.f32, shape=self.n)
     self.devia_lambda = ti.field(dtype=ti.f32, shape=self.n)
@@ -29,6 +29,8 @@ class Deform3D:
     self.v_p_ref = v_p_ref
     self.dt = dt
     self.method = method
+    self.benchmark = benchmark
+    self._update_count = 0
     if method == 'graph_coloring':
       self.compute_graph_coloring()
 
@@ -46,6 +48,9 @@ class Deform3D:
       self.solve_cons_gauss_seidel()
     elif self.method == 'graph_coloring':
       self.solve_cons_graph_coloring()
+    if self.benchmark is not None:
+      self.benchmark.record_iteration(self._update_count, 0.0)
+      self._update_count += 1
 
   @ti.kernel
   def solve_cons(self):
